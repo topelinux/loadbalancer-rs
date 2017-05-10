@@ -1,5 +1,7 @@
-use mio::{Token, EventSet, TryRead, TryWrite};
+//use std::io;
+use mio::{Token, Ready};
 use mio::tcp::TcpStream;
+use std::io::prelude::*;
 
 use slab::Index;
 
@@ -22,13 +24,13 @@ pub struct OutgoingToken(pub usize);
 type BufferArray = [u8; 4096];
 
 pub struct Connection {
-    incoming_state: EventSet,
+    incoming_state: Ready,
     incoming_stream: TcpStream,
     incoming_buffer: BufferArray,
     incoming_buffer_size: usize,
     incoming_total_transfer: usize,
 
-    outgoing_state: EventSet,
+    outgoing_state: Ready,
     outgoing_stream: TcpStream,
     outgoing_token: OutgoingToken,
     outgoing_buffer: BufferArray,
@@ -42,13 +44,13 @@ impl Connection {
                outgoing_token: OutgoingToken)
                -> Connection {
         Connection {
-            incoming_state: EventSet::none(),
+            incoming_state: Ready::none(),
             incoming_stream: incoming_stream,
             incoming_buffer: [0; 4096],
             incoming_buffer_size: 4096,
             incoming_total_transfer: 0,
 
-            outgoing_state: EventSet::none(),
+            outgoing_state: Ready::none(),
             outgoing_stream: outgoing_stream,
             outgoing_token: outgoing_token,
             outgoing_buffer: [0; 4096],
@@ -57,11 +59,11 @@ impl Connection {
         }
     }
 
-    pub fn incoming_ready(&mut self, events: EventSet) {
+    pub fn incoming_ready(&mut self, events: Ready) {
         self.incoming_state.insert(events);
     }
 
-    pub fn outgoing_ready(&mut self, events: EventSet) {
+    pub fn outgoing_ready(&mut self, events: Ready) {
         self.outgoing_state.insert(events);
     }
 
@@ -100,7 +102,7 @@ impl Connection {
                                       &mut self.incoming_buffer_size,
                                       &mut self.outgoing_stream,
                                       &mut self.outgoing_total_transfer);
-            self.outgoing_state.remove(EventSet::writable());
+            self.outgoing_state.remove(Ready::writable());
         }
 
         if self.outgoing_buffer.len() != self.outgoing_buffer_size &&
@@ -110,7 +112,7 @@ impl Connection {
                                       &mut self.outgoing_buffer_size,
                                       &mut self.incoming_stream,
                                       &mut self.incoming_total_transfer);
-            self.incoming_state.remove(EventSet::writable());
+            self.incoming_state.remove(Ready::writable());
         }
 
         if self.outgoing_state.is_writable() && self.incoming_state.is_readable() {
@@ -120,8 +122,8 @@ impl Connection {
                                   &mut self.incoming_stream,
                                   &mut self.outgoing_stream,
                                   &mut self.outgoing_total_transfer);
-            self.incoming_state.remove(EventSet::readable());
-            self.outgoing_state.remove(EventSet::writable());
+            self.incoming_state.remove(Ready::readable());
+            self.outgoing_state.remove(Ready::writable());
         }
 
         if self.incoming_state.is_writable() && self.outgoing_state.is_readable() {
@@ -131,8 +133,8 @@ impl Connection {
                                   &mut self.outgoing_stream,
                                   &mut self.incoming_stream,
                                   &mut self.incoming_total_transfer);
-            self.incoming_state.remove(EventSet::writable());
-            self.outgoing_state.remove(EventSet::readable());
+            self.incoming_state.remove(Ready::writable());
+            self.outgoing_state.remove(Ready::readable());
         }
 
         !could_send || data_sent
@@ -149,8 +151,8 @@ fn flush_buffer(buf: &BufferArray,
 
     trace!("Will flush {} bytes", bytes_to_write);
 
-    match dest.try_write(&buf[start_index..]) {
-        Ok(Some(n_written)) => {
+    match dest.write(&buf[start_index..]) {
+        Ok(n_written) => {
             *total += n_written;
             trace!("Flushed {} bytes, total {}", n_written, *total);
 
@@ -159,9 +161,6 @@ fn flush_buffer(buf: &BufferArray,
             *buf_size = buf.len();
 
             return n_written > 0;
-        }
-        Ok(None) => {
-            trace!("Writing would block");
         }
         Err(e) => {
             error!("Writing caused error: {}", e);
@@ -177,12 +176,12 @@ fn transfer(buf: &mut BufferArray,
             dest: &mut TcpStream,
             total: &mut usize)
             -> bool {
-    match src.try_read(buf) {
-        Ok(Some(n_read)) => {
+    match src.read(buf) {
+        Ok(n_read) => {
             trace!("Read {} bytes", n_read);
 
-            match dest.try_write(&buf[0..n_read]) {
-                Ok(Some(n_written)) => {
+            match dest.write(&buf[0..n_read]) {
+                Ok(n_written) => {
                     *total += n_written;
                     trace!("Wrote {} bytes, total {}", n_written, *total);
 
@@ -194,16 +193,10 @@ fn transfer(buf: &mut BufferArray,
 
                     return n_written > 0;
                 }
-                Ok(None) => {
-                    trace!("Writing would block");
-                }
                 Err(e) => {
                     error!("Writing caused error: {}", e);
                 }
             }
-        }
-        Ok(None) => {
-            trace!("Reading would block");
         }
         Err(e) => {
             error!("Reading caused error: {}", e);
@@ -215,7 +208,7 @@ fn transfer(buf: &mut BufferArray,
 
 impl TokenType {
     pub fn from_raw_token(t: Token) -> TokenType {
-        let i = t.as_usize();
+        let i = usize::from(t);
 
         match i & 3 {
             0 => TokenType::Listener(ListenerToken(i >> 2)),
