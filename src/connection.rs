@@ -1,5 +1,6 @@
 //use std::io;
 use mio::{Token, Ready};
+use mio::unix::UnixReady;
 use mio::tcp::TcpStream;
 use std::io::prelude::*;
 
@@ -44,13 +45,13 @@ impl Connection {
                outgoing_token: OutgoingToken)
                -> Connection {
         Connection {
-            incoming_state: Ready::none(),
+            incoming_state: Ready::empty(),
             incoming_stream: incoming_stream,
             incoming_buffer: [0; 4096],
             incoming_buffer_size: 4096,
             incoming_total_transfer: 0,
 
-            outgoing_state: Ready::none(),
+            outgoing_state: Ready::empty(),
             outgoing_stream: outgoing_stream,
             outgoing_token: outgoing_token,
             outgoing_buffer: [0; 4096],
@@ -68,11 +69,15 @@ impl Connection {
     }
 
     pub fn is_outgoing_closed(&self) -> bool {
-        self.outgoing_state.is_error() || self.outgoing_state.is_hup()
+        let unix_ready = UnixReady::from(self.outgoing_state);
+
+        unix_ready.is_error() || unix_ready.is_hup()
     }
 
     pub fn is_incoming_closed(&self) -> bool {
-        self.incoming_state.is_error() || self.incoming_state.is_hup()
+        let unix_ready = UnixReady::from(self.incoming_state);
+
+        unix_ready.is_error() || unix_ready.is_hup()
     }
 
     pub fn incoming_stream<'a>(&'a self) -> &'a TcpStream {
