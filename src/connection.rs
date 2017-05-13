@@ -3,7 +3,7 @@ use mio::{Token, Ready};
 use mio::unix::UnixReady;
 use mio::tcp::TcpStream;
 use std::io::prelude::*;
-
+use std::io::ErrorKind;
 use slab::Index;
 
 #[derive(Debug, Copy, Clone)]
@@ -199,11 +199,20 @@ fn transfer(buf: &mut BufferArray,
                     return n_written > 0;
                 }
                 Err(e) => {
+                    if e.kind() == ErrorKind::WouldBlock {
+                        trace!("WouldBlock when write");
+                        return false;
+                    }
                     error!("Writing caused error: {}", e);
                 }
             }
         }
         Err(e) => {
+            if e.kind() == ErrorKind::WouldBlock {
+                trace!("WouldBlock when read");
+                return false;
+            }
+
             error!("Reading caused error: {}", e);
         }
     }

@@ -1,12 +1,11 @@
 use std::collections::HashSet;
 
-use mio;
-use mio::{Token, Poll, PollOpt, Events, Event, Ready};
+use mio::{Poll, PollOpt, Events, Ready};
 use mio::tcp::TcpStream;
 
 use slab::Slab;
 
-use config::RootConfig;
+// use config::RootConfig;
 use connection::{TokenType, ListenerToken, IncomingToken, OutgoingToken, Connection};
 use driver_state::DriverState;
 
@@ -17,10 +16,10 @@ pub struct Driver {
     state: DriverState,
 }
 
-pub enum DriverMessage {
-    Shutdown,
-    Reconfigure(RootConfig),
-}
+// pub enum DriverMessage {
+//     Shutdown,
+//     Reconfigure(RootConfig),
+// }
 
 impl Driver {
     pub fn new(state: DriverState) -> Driver {
@@ -74,12 +73,12 @@ impl Driver {
 
             poll.register(connection.incoming_stream(),
                           incoming_token.as_raw_token(),
-                          Ready::all(),
+                          Ready::readable() | Ready::readable(),
                           PollOpt::edge() | PollOpt::oneshot())
                 .unwrap();
             poll.register(connection.outgoing_stream(),
                           outgoing_token.as_raw_token(),
-                          Ready::all(),
+                          Ready::readable(),
                           PollOpt::edge() | PollOpt::oneshot())
                 .unwrap();
 
@@ -159,13 +158,13 @@ impl Driver {
             if let Some(connection) = self.incoming_connections.get(*token) {
                 poll.reregister(connection.incoming_stream(),
                                 token.as_raw_token(),
-                                Ready::all(),
+                                Ready::readable() | Ready::writable(),
                                 PollOpt::edge() | PollOpt::oneshot())
                     .unwrap();
 
                 poll.reregister(connection.outgoing_stream(),
                                 connection.outgoing_token().as_raw_token(),
-                                Ready::all(),
+                                Ready::readable() | Ready::writable(),
                                 PollOpt::edge() | PollOpt::oneshot())
                     .unwrap();
             }
@@ -192,9 +191,11 @@ impl Driver {
 
             for event in events.iter() {
                 match TokenType::from_raw_token(event.token()) {
-                    TokenType::Listener(token) => self.listener_ready(poll, token, event.kind()),
-                    TokenType::Incoming(token) => self.incoming_ready(token, event.kind()),
-                    TokenType::Outgoing(token) => self.outgoing_ready(token, event.kind()),
+                    TokenType::Listener(token) => {
+                        self.listener_ready(poll, token, event.readiness())
+                    }
+                    TokenType::Incoming(token) => self.incoming_ready(token, event.readiness()),
+                    TokenType::Outgoing(token) => self.outgoing_ready(token, event.readiness()),
                 }
             }
             self.tick(poll);
@@ -202,50 +203,51 @@ impl Driver {
     }
 }
 
-//#[cfg(test)]
-//mod test {
-//    use super::{EventLoop, Driver, DriverMessage};
-//
-//    use std::thread;
-//    use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
-//    use std::net::{TcpStream, TcpListener, SocketAddr};
-//    use std::str::FromStr;
-//    use std::io::{Write, BufReader, BufRead};
-//    use std::time::Duration;
-//    use std::collections::HashMap;
-//    use std::default::Default;
-//
-//    use env_logger;
-//
-//    use config::RootConfig;
-//    use driver_state::DriverState;
-//
-//    static PORT_NUMBER: AtomicUsize = ATOMIC_USIZE_INIT;
-//
-//    fn next_port() -> u16 {
-//        let first_port =
-//            option_env!("TEST_BASE_PORT").map_or(32328, |v| v.parse::<usize>().unwrap());
-//        PORT_NUMBER.compare_and_swap(0, first_port, Ordering::SeqCst);
-//
-//        PORT_NUMBER.fetch_add(1, Ordering::SeqCst) as u16
-//    }
-//
-//    #[test]
-//    fn start_stop_driver() {
-//        env_logger::init().unwrap_or(());
-//
-//        let mut event_loop = EventLoop::new().unwrap();
-//        let sender = event_loop.channel();
-//
-//        let t = thread::spawn(move || {
-//                                  let mut driver =
-//                                      Driver::new(DriverState::new(&Default::default()));
-//                                  event_loop.run(&mut driver).unwrap();
-//                              });
-//
-//        sender.send(DriverMessage::Shutdown).unwrap();
-//        t.join().unwrap();
-//    }
+#[cfg(test)]
+mod test {
+    use super::{EventLoop, Driver, DriverMessage};
+
+    use std::thread;
+    use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+    use std::net::{TcpStream, TcpListener, SocketAddr};
+    use std::str::FromStr;
+    use std::io::{Write, BufReader, BufRead};
+    use std::time::Duration;
+    use std::collections::HashMap;
+    use std::default::Default;
+
+    use env_logger;
+
+    use config::RootConfig;
+    use driver_state::DriverState;
+
+    static PORT_NUMBER: AtomicUsize = ATOMIC_USIZE_INIT;
+
+    fn next_port() -> u16 {
+        let first_port =
+            option_env!("TEST_BASE_PORT").map_or(32328, |v| v.parse::<usize>().unwrap());
+        PORT_NUMBER.compare_and_swap(0, first_port, Ordering::SeqCst);
+
+        PORT_NUMBER.fetch_add(1, Ordering::SeqCst) as u16
+    }
+
+    #[test]
+    fn start_stop_driver() {
+        env_logger::init().unwrap_or(());
+
+        let mut event_loop = EventLoop::new().unwrap();
+        let sender = event_loop.channel();
+
+        let t = thread::spawn(move || {
+                                  let mut driver =
+                                      Driver::new(DriverState::new(&Default::default()));
+                                  event_loop.run(&mut driver).unwrap();
+                              });
+
+        sender.send(DriverMessage::Shutdown).unwrap();
+        t.join().unwrap();
+    }
+}
 //
 //    #[test]
 //    fn single_backend() {
