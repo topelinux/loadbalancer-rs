@@ -141,26 +141,21 @@ impl Connection {
         self.backend_token
     }
 
-    pub fn transfer(&mut self, src: EndPointType, dest: EndPointType) -> usize {
+    pub fn transfer(&mut self, src_index: usize, dest_index: usize) -> usize {
         let mut count = 0;
-        if self.points[src as usize].buffer_index > 0 &&
-           self.points[dest as usize].state.is_writable() {
-            count = EndPoint::pipe(&mut self.points[src as usize].buffer,
-                                   self.points[src as usize].buffer_index,
-                                   &mut self.points[dest as usize].stream);
-            self.points[src as usize].buffer_index = 0;
+        if self.points[src_index].buffer_index > 0 && self.points[dest_index].state.is_writable() {
+            count = EndPoint::pipe(&mut self.points[src_index].buffer,
+                                   self.points[src_index].buffer_index,
+                                   &mut self.points[dest_index].stream);
+            self.points[src_index].buffer_index = 0;
+            self.points[dest_index].state.remove(Ready::writable());
         }
         count
     }
     pub fn tick(&mut self) -> bool {
-        //        trace!("Connection in state [incoming {:?}] [outgoing {:?}]",
-        //               self.incoming_state,
-        //               self.outgoing_state);
-
         let mut sended = false;
         for point in self.points.iter_mut() {
             if point.state.is_readable() {
-                info!("point state is readable");
                 EndPoint::absorb(&mut point.buffer,
                                  &mut point.buffer_index,
                                  &mut point.stream);
@@ -168,8 +163,8 @@ impl Connection {
             }
         }
 
-        sended |= self.transfer(EndPointType::Back, EndPointType::Front) > 0;
-        sended |= self.transfer(EndPointType::Front, EndPointType::Back) > 0;
+        sended |= self.transfer(EndPointType::Back as usize, EndPointType::Front as usize) > 0;
+        sended |= self.transfer(EndPointType::Front as usize, EndPointType::Back as usize) > 0;
         sended
     }
 }
