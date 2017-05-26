@@ -4,7 +4,9 @@ use mio::unix::UnixReady;
 use mio::tcp::TcpStream;
 use std::io::prelude::*;
 use std::io::ErrorKind;
+use std::ptr;
 use slab::Index;
+
 
 #[derive(Debug, Copy, Clone)]
 pub enum TokenType {
@@ -65,14 +67,22 @@ impl EndPoint {
         return 0;
     }
 
-    pub fn pipe(buf: &mut BufferArray, size: usize, dest: &mut TcpStream) -> usize {
+    pub fn pipe(buf: &mut BufferArray,
+                size: usize,
+                new_index: &mut usize,
+                dest: &mut TcpStream)
+                -> usize {
         info!("in pipe size is {}", size);
         match dest.write(buf.split_at(size).0) {
             Ok(n_written) => {
-                info!("### Write {} bytes", n_written);
-                if n_written < size {
-                    error!("do not support shorten writeen");
+                let left = size - n_written;
+                if left > 0 {
+                    unsafe {
+                        ptr::copy(&buf[n_written], &mut buf[0], left);
+                    }
+                    info!("in shorten writeen");
                 }
+                *new_index = left;
                 return n_written;
             }
             Err(e) => {
@@ -146,8 +156,8 @@ impl Connection {
         if self.points[src_index].buffer_index > 0 && self.points[dest_index].state.is_writable() {
             count = EndPoint::pipe(&mut self.points[src_index].buffer,
                                    self.points[src_index].buffer_index,
+                                   &mut self.points[src_index].buffer_index,
                                    &mut self.points[dest_index].stream);
-            self.points[src_index].buffer_index = 0;
             self.points[dest_index].state.remove(Ready::writable());
         }
         count
