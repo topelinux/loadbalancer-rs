@@ -52,7 +52,6 @@ impl EndPoint {
     pub fn absorb(buf: &mut BufferArray, index: &mut usize, src: &mut TcpStream) -> usize {
         match src.read(buf.split_at_mut(*index).1) {
             Ok(n_read) => {
-                info!("### Read {} bytes", n_read);
                 *index += n_read;
                 return n_read;
             }
@@ -165,7 +164,7 @@ impl Connection {
     pub fn tick(&mut self) -> bool {
         let mut sended = false;
         for point in self.points.iter_mut() {
-            if point.state.is_readable() {
+            if point.state.is_readable() && point.buffer_index < 4096 {
                 EndPoint::absorb(&mut point.buffer,
                                  &mut point.buffer_index,
                                  &mut point.stream);

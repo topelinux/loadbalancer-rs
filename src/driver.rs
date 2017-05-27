@@ -97,7 +97,7 @@ impl Driver {
         let mut remove = false;
 
         if let Some(mut connection) = self.connections.get_mut(token) {
-            info!("in incoming ready {:?} {:?}", token, ready.is_readable());
+            debug!("in incoming ready {:?} {:?}", token, ready);
             connection.incoming_ready(ready);
             let data_sent = connection.tick();
             if !data_sent && (connection.is_incoming_closed() || connection.is_outgoing_closed()) {
@@ -122,10 +122,10 @@ impl Driver {
                 connection.outgoing_ready(ready);
                 let data_sent = connection.tick();
 
-                if !data_sent && connection.is_outgoing_closed() {
+                if !data_sent &&
+                   (connection.is_incoming_closed() || connection.is_outgoing_closed()) {
                     remove = true;
-                } else if data_sent {
-                    //info!("to_reregister token {:?} from outgoing_ready", token);
+                } else if data_sent || ready.is_readable() {
                     self.to_reregister.insert(incoming_token);
                 }
             } else {
