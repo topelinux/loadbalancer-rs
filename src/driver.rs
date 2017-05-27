@@ -11,8 +11,8 @@ use driver_state::DriverState;
 
 pub struct Driver {
     to_reregister: HashSet<IncomingToken>,
-    incoming_connections: Slab<Connection, IncomingToken>,
-    outgoing_connections_token: Slab<Option<IncomingToken>, OutgoingToken>,
+    connections: Slab<Connection, IncomingToken>,
+    connection_tokens: Slab<Option<IncomingToken>, OutgoingToken>,
     state: DriverState,
 }
 
@@ -25,10 +25,9 @@ impl Driver {
     pub fn new(state: DriverState) -> Driver {
         Driver {
             to_reregister: HashSet::new(),
-            incoming_connections: Slab::new_starting_at(IncomingToken(1),
-                                                        state.config.buffers.connections),
-            outgoing_connections_token: Slab::new_starting_at(OutgoingToken(1),
-                                                              state.config.buffers.connections),
+            connections: Slab::new_starting_at(IncomingToken(1), state.config.buffers.connections),
+            connection_tokens: Slab::new_starting_at(OutgoingToken(1),
+                                                     state.config.buffers.connections),
             state: state,
         }
     }
@@ -58,18 +57,18 @@ impl Driver {
                 }
             };
 
-            let outgoing_token = self.outgoing_connections_token
+            let outgoing_token = self.connection_tokens
                 .insert(None)
                 .expect("Outgoing buffer full");
 
-            let incoming_token = self.incoming_connections
+            let incoming_token = self.connections
                 .insert(Connection::new(incoming, outgoing, outgoing_token))
                 .map_err(|_| "Incoming buffer full")
                 .unwrap();
 
-            self.outgoing_connections_token[outgoing_token] = Some(incoming_token);
+            self.connection_tokens[outgoing_token] = Some(incoming_token);
 
-            let connection = self.incoming_connections.get(incoming_token).unwrap();
+            let connection = self.connections.get(incoming_token).unwrap();
 
             info!("IncomingToken {:?}", incoming_token.as_raw_token());
             info!("OutgoingToken {:?}", outgoing_token.as_raw_token());
@@ -97,7 +96,7 @@ impl Driver {
     fn incoming_ready(&mut self, token: IncomingToken, ready: Ready) {
         let mut remove = false;
 
-        if let Some(mut connection) = self.incoming_connections.get_mut(token) {
+        if let Some(mut connection) = self.connections.get_mut(token) {
             info!("in incoming ready {:?} {:?}", token, ready.is_readable());
             connection.incoming_ready(ready);
             let data_sent = connection.tick();
@@ -116,10 +115,10 @@ impl Driver {
     }
 
     fn outgoing_ready(&mut self, token: OutgoingToken, ready: Ready) {
-        if let Some(&Some(incoming_token)) = self.outgoing_connections_token.get(token) {
+        if let Some(&Some(incoming_token)) = self.connection_tokens.get(token) {
             let mut remove = false;
 
-            if let Some(mut connection) = self.incoming_connections.get_mut(incoming_token) {
+            if let Some(mut connection) = self.connections.get_mut(incoming_token) {
                 connection.outgoing_ready(ready);
                 let data_sent = connection.tick();
 
@@ -139,7 +138,7 @@ impl Driver {
                 debug!("Clearing connection from {:?} -> {:?}",
                        token,
                        incoming_token);
-                self.outgoing_connections_token[token] = None
+                self.connection_tokens[token] = None
             }
         } else {
             warn!("Could not find outgoing connection for {:?}", token);
@@ -148,17 +147,17 @@ impl Driver {
 
     fn remove_connection(&mut self, token: IncomingToken) {
         debug!("Removing connection on incoming token {:?}", token);
-        let connection = self.incoming_connections
+        let connection = self.connections
             .remove(token)
             .expect("Can't remove already removed incoming connection");
-        self.outgoing_connections_token
+        self.connection_tokens
             .remove(connection.outgoing_token())
             .expect("Can't remove already removed outgoing connection");
     }
 
     fn tick(&mut self, poll: &mut Poll) {
         for token in self.to_reregister.iter() {
-            if let Some(connection) = self.incoming_connections.get(*token) {
+            if let Some(connection) = self.connections.get(*token) {
                 poll.reregister(connection.incoming_stream(),
                                 token.as_raw_token(),
                                 Ready::readable() | Ready::writable(),
@@ -195,7 +194,6 @@ impl Driver {
             for event in events.iter() {
                 match TokenType::from_raw_token(event.token()) {
                     TokenType::Listener(token) => {
-                        println!("listener token");
                         self.listener_ready(poll, token, event.readiness())
                     }
                     TokenType::Incoming(token) => self.incoming_ready(token, event.readiness()),
