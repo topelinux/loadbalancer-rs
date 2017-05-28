@@ -5,8 +5,6 @@ use mio::tcp::TcpStream;
 use std::io::prelude::*;
 use std::io::ErrorKind;
 use std::ptr;
-use slab::Index;
-
 
 #[derive(Debug, Copy, Clone)]
 pub enum TokenType {
@@ -209,32 +207,38 @@ impl OutgoingToken {
     }
 }
 
-impl Index for ListenerToken {
-    fn from_usize(i: usize) -> ListenerToken {
+impl From<usize> for ListenerToken {
+    fn from(i: usize) -> ListenerToken {
         ListenerToken(i)
     }
+}
 
-    fn as_usize(&self) -> usize {
-        self.0
+impl From<ListenerToken> for usize {
+    fn from(val: ListenerToken) -> usize {
+        val.0
     }
 }
 
-impl Index for IncomingToken {
-    fn from_usize(i: usize) -> IncomingToken {
+impl From<usize> for IncomingToken {
+    fn from(i: usize) -> IncomingToken {
         IncomingToken(i)
     }
+}
 
-    fn as_usize(&self) -> usize {
-        self.0
+impl From<IncomingToken> for usize {
+    fn from(val: IncomingToken) -> usize {
+        val.0
     }
 }
 
-impl Index for OutgoingToken {
-    fn from_usize(i: usize) -> OutgoingToken {
+impl From<usize> for OutgoingToken {
+    fn from(i: usize) -> OutgoingToken {
         OutgoingToken(i)
     }
+}
 
-    fn as_usize(&self) -> usize {
-        self.0
+impl From<OutgoingToken> for usize {
+    fn from(val: OutgoingToken) -> usize {
+        val.0
     }
 }

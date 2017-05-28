@@ -25,9 +25,8 @@ impl Driver {
     pub fn new(state: DriverState) -> Driver {
         Driver {
             to_reregister: HashSet::new(),
-            connections: Slab::new_starting_at(IncomingToken(1), state.config.buffers.connections),
-            connection_tokens: Slab::new_starting_at(OutgoingToken(1),
-                                                     state.config.buffers.connections),
+            connections: Slab::with_capacity(state.config.buffers.connections),
+            connection_tokens: Slab::with_capacity(state.config.buffers.connections),
             state: state,
         }
     }

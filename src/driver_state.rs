@@ -31,7 +31,7 @@ pub struct DriverState {
 impl DriverState {
     pub fn new(buffers: &BufferConfig) -> DriverState {
         DriverState {
-            listeners: Slab::new_starting_at(ListenerToken(1), buffers.listeners),
+            listeners: Slab::with_capacity(buffers.listeners),
             listeners_to_remove: HashSet::new(),
             config: RootConfig {
                 buffers: (*buffers).clone(),
@@ -86,17 +86,21 @@ impl DriverState {
 
         for (addr, frontend) in listeners_to_add.into_iter() {
             let tcp_listener = try!(TcpListener::bind(&addr));
-            let token = try!(self.listeners
-                                 .insert_with(|token| {
-                                                  Listener {
-                                                      listener: tcp_listener,
-                                                      listen_addr: addr,
-                                                      token: token,
-                                                      frontend: frontend,
-                                                  }
-                                              })
-                                 .ok_or(IOError::new(ErrorKind::Other,
-                                                     "Listener buffer full")));
+            let token = match self.listeners.vacant_entry() {
+                Some(entry) => {
+                    let listener = Listener {
+                        listener: tcp_listener,
+                        listen_addr: addr,
+                        token: entry.index(),
+                        frontend: frontend,
+                    };
+                    entry.insert(listener).index()
+                }
+                None => {
+                    return Err(IOError::new(ErrorKind::Other, "Listener buffer full"));
+                }
+            };
+
             let listener = &self.listeners[token];
 
             info!("Added listener with token {:?}", token);
