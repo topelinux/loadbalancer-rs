@@ -35,6 +35,7 @@ pub struct EndPoint {
     stream: TcpStream,
     buffer: BufferArray,
     buffer_index: usize,
+    peer_stream: Option<TcpStream>,
 }
 
 impl EndPoint {
@@ -44,9 +45,15 @@ impl EndPoint {
             stream: tcp_stream,
             buffer: [0; 4096],
             buffer_index: 0,
+            peer_stream: None,
         }
     }
 
+    pub fn set_peer_stream(&mut self, tcp_stream: &TcpStream) {
+        if let Ok(stream) = tcp_stream.try_clone() {
+            self.peer_stream = Some(stream);
+        }
+    }
     pub fn absorb(buf: &mut BufferArray, index: &mut usize, src: &mut TcpStream) -> usize {
         match src.read(buf.split_at_mut(*index).1) {
             Ok(n_read) => {
@@ -64,35 +71,62 @@ impl EndPoint {
         return 0;
     }
 
-    pub fn pipe(buf: &mut BufferArray,
-                size: usize,
-                new_index: &mut usize,
-                dest: &mut TcpStream)
-                -> usize {
-        info!("in pipe size is {}", size);
-        match dest.write(buf.split_at(size).0) {
-            Ok(n_written) => {
-                let left = size - n_written;
-                if left > 0 {
-                    unsafe {
-                        ptr::copy(&buf[n_written], &mut buf[0], left);
+    pub fn pipe(&mut self) -> usize {
+        if let Some(mut dest) = self.peer_stream.as_mut() {
+            match dest.write(self.buffer.split_at(self.buffer_index).0) {
+                Ok(n_written) => {
+                    let left = self.buffer_index - n_written;
+                    if left > 0 {
+                        unsafe {
+                            ptr::copy(&self.buffer[n_written], &mut self.buffer[0], left);
+                        }
+                        info!("in shorten writeen");
                     }
-                    info!("in shorten writeen");
+                    self.buffer_index = left;
+                    return n_written;
                 }
-                *new_index = left;
-                return n_written;
-            }
-            Err(e) => {
-                if e.kind() == ErrorKind::WouldBlock {
-                    // info!("WouldBlock when read");
+                Err(e) => {
+                    if e.kind() == ErrorKind::WouldBlock {
+                        // info!("WouldBlock when read");
+                        return 0;
+                    }
+
+                    error!("Reading caused error: {}", e);
                     return 0;
                 }
-
-                error!("Reading caused error: {}", e);
-                return 0;
             }
         }
+        return 0;
     }
+    // pub fn pipe(buf: &mut BufferArray,
+    //             size: usize,
+    //             new_index: &mut usize,
+    //             dest: &mut TcpStream)
+    //             -> usize {
+    //     info!("in pipe size is {}", size);
+    //     match dest.write(buf.split_at(size).0) {
+    //         Ok(n_written) => {
+    //             let left = size - n_written;
+    //             if left > 0 {
+    //                 unsafe {
+    //                     ptr::copy(&buf[n_written], &mut buf[0], left);
+    //                 }
+    //                 info!("in shorten writeen");
+    //             }
+    //             *new_index = left;
+    //             return n_written;
+    //         }
+    //         Err(e) => {
+    //             if e.kind() == ErrorKind::WouldBlock {
+    //                 // info!("WouldBlock when read");
+    //                 return 0;
+    //             }
+
+    //             error!("Reading caused error: {}", e);
+    //             return 0;
+    //         }
+    //     }
+    // }
 }
 
 pub struct Connection {
@@ -105,9 +139,12 @@ impl Connection {
                outgoing_stream: TcpStream,
                outgoing_token: OutgoingToken)
                -> Connection {
+        let mut front = EndPoint::new(incoming_stream);
+        let mut backend = EndPoint::new(outgoing_stream);
+        front.set_peer_stream(&backend.stream);
+        backend.set_peer_stream(&front.stream);
         Connection {
-            points: [EndPoint::new(incoming_stream),
-                     EndPoint::new(outgoing_stream)],
+            points: [front, backend],
             backend_token: outgoing_token,
         }
     }
@@ -151,10 +188,7 @@ impl Connection {
     pub fn transfer(&mut self, src_index: usize, dest_index: usize) -> usize {
         let mut count = 0;
         if self.points[src_index].buffer_index > 0 && self.points[dest_index].state.is_writable() {
-            count = EndPoint::pipe(&mut self.points[src_index].buffer,
-                                   self.points[src_index].buffer_index,
-                                   &mut self.points[src_index].buffer_index,
-                                   &mut self.points[dest_index].stream);
+            count = self.points[src_index].pipe();
             self.points[dest_index].state.remove(Ready::writable());
         }
         count
