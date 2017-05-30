@@ -54,10 +54,11 @@ impl EndPoint {
             self.peer_stream = Some(stream);
         }
     }
-    pub fn absorb(buf: &mut BufferArray, index: &mut usize, src: &mut TcpStream) -> usize {
-        match src.read(buf.split_at_mut(*index).1) {
+    pub fn absorb(&mut self) -> usize {
+        match self.stream
+                  .read(self.buffer.split_at_mut(self.buffer_index).1) {
             Ok(n_read) => {
-                *index += n_read;
+                self.buffer_index += n_read;
                 return n_read;
             }
             Err(e) => {
@@ -197,9 +198,7 @@ impl Connection {
         let mut sended = false;
         for point in self.points.iter_mut() {
             if point.state.is_readable() && point.buffer_index < 4096 {
-                EndPoint::absorb(&mut point.buffer,
-                                 &mut point.buffer_index,
-                                 &mut point.stream);
+                point.absorb();
                 point.state.remove(Ready::readable());
             }
         }
