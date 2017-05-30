@@ -55,6 +55,9 @@ impl EndPoint {
         }
     }
     pub fn absorb(&mut self) -> usize {
+        if self.buffer_index >= 4096 {
+            return 0;
+        }
         match self.stream
                   .read(self.buffer.split_at_mut(self.buffer_index).1) {
             Ok(n_read) => {
@@ -160,25 +163,38 @@ impl Connection {
         self.backend_token
     }
 
-    pub fn transfer(&mut self, src_index: usize, dest_index: usize) -> usize {
-        let mut count = 0;
-        if self.points[dest_index].state.is_writable() {
-            count = self.points[src_index].pipe_to_peer();
-            self.points[dest_index].state.remove(Ready::writable());
-        }
-        count
-    }
+    // pub fn transfer(&mut self, src_index: usize, dest_index: usize) -> usize {
+    //     if self.points[dest_index].state.is_writable() {
+    //         self.points[dest_index].state.remove(Ready::writable());
+    //         return self.points[src_index].pipe_to_peer();
+    //     }
+    //     0
+    // }
+
     pub fn tick(&mut self) -> bool {
         let mut sended = false;
-        for point in self.points.iter_mut() {
-            if point.state.is_readable() && point.buffer_index < 4096 {
-                point.absorb();
-                point.state.remove(Ready::readable());
+        let need_pipe: Vec<bool> = self.points
+            .iter_mut()
+            .map(|point| {
+                if point.state.is_readable() {
+                    point.absorb();
+                    point.state.remove(Ready::readable());
+                }
+                if point.state.is_writable() {
+                    point.state.remove(Ready::writable());
+                    true
+                } else {
+                    false
+                }
+            })
+            .rev()
+            .collect();
+
+        for (index, point) in self.points.iter_mut().enumerate() {
+            if need_pipe[index] {
+                sended |= point.pipe_to_peer() > 0;
             }
         }
-
-        sended |= self.transfer(EndPointType::Back as usize, EndPointType::Front as usize) > 0;
-        sended |= self.transfer(EndPointType::Front as usize, EndPointType::Back as usize) > 0;
         sended
     }
 }
