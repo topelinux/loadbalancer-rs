@@ -185,7 +185,6 @@ impl Driver {
         self.state.listeners_to_remove.clear();
     }
 
-
     pub fn run(&mut self, poll: &mut Poll, events: &mut Events) {
         loop {
             poll.poll(events, None).unwrap();

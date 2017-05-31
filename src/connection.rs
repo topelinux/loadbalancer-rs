@@ -192,7 +192,7 @@ impl Connection {
 
         for (index, point) in self.points.iter_mut().enumerate() {
             if need_pipe[index] {
-                sended |= point.pipe_to_peer() > 0;
+                sended |= (*point).pipe_to_peer() > 0;
             }
         }
         sended
