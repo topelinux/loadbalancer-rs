@@ -230,6 +230,18 @@ impl OutgoingToken {
     }
 }
 
+// ToDo: Check if possible
+// impl<U> From<usize> for U {
+//     fn from(i: usize) -> U {
+//         U(i);
+//     }
+// }
+//
+// impl<U> From<U> for usize {
+//     fn from(val: U) -> usize {
+//         val.0
+//     }
+// }
 impl From<usize> for ListenerToken {
     fn from(i: usize) -> ListenerToken {
         ListenerToken(i)
