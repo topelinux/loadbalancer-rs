@@ -37,7 +37,7 @@ impl Driver {
         if let Some(listener) = self.state.listeners.get(token) {
             info!("Accepting connection");
 
-            let incoming = match listener.listener.accept() {
+            let incoming = match listener.tcp_listener.accept() {
                 Ok((sock, _)) => sock,
                 Err(e) => {
                     error!("Accept error: {}", e);
@@ -82,7 +82,7 @@ impl Driver {
                           PollOpt::edge() | PollOpt::oneshot())
                 .unwrap();
 
-            poll.reregister(&listener.listener,
+            poll.reregister(&listener.tcp_listener,
                             token.as_raw_token(),
                             Ready::readable() | Ready::writable(),
                             PollOpt::edge() | PollOpt::oneshot())
@@ -178,7 +178,7 @@ impl Driver {
 
             let listener = self.state.listeners.remove(*token).unwrap();
 
-            poll.deregister(&listener.listener).unwrap();
+            poll.deregister(&listener.tcp_listener).unwrap();
             drop(listener);
         }
 

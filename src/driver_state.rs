@@ -16,7 +16,7 @@ use connection::ListenerToken;
 use config::{RootConfig, BackendConfig, FrontendConfig, BufferConfig};
 
 pub struct Listener {
-    pub listener: TcpListener,
+    pub tcp_listener: TcpListener,
     pub listen_addr: SocketAddr,
     pub frontend: Rc<Frontend>,
     pub token: ListenerToken,
@@ -86,7 +86,7 @@ impl DriverState {
             let token = match self.listeners.vacant_entry() {
                 Some(entry) => {
                     let listener = Listener {
-                        listener: tcp_listener,
+                        tcp_listener: tcp_listener,
                         listen_addr: addr,
                         token: entry.index(),
                         frontend: frontend,
@@ -102,7 +102,7 @@ impl DriverState {
 
             info!("Added listener with token {:?}", token);
 
-            try!(poll.register(&listener.listener,
+            try!(poll.register(&listener.tcp_listener,
                                listener.token.as_raw_token(),
                                Ready::readable(),
                                PollOpt::edge() | PollOpt::oneshot()));
