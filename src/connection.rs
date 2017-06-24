@@ -30,6 +30,22 @@ pub enum EndPointType {
     Back = 1,
 }
 
+macro_rules! create_trait {
+	($type_name:ident) => (
+	impl From<usize> for $type_name {
+		fn from(i: usize) -> $type_name {
+			$type_name(i)
+		}
+	}
+
+    impl From<$type_name> for usize {
+        fn from(val: $type_name) -> usize {
+            val.0
+        }
+    }
+	)
+}
+
 pub struct EndPoint {
     state: Ready,
     stream: TcpStream,
@@ -230,50 +246,42 @@ impl OutgoingToken {
     }
 }
 
-// ToDo: Check if possible
-// impl<U> From<usize> for U {
-//     fn from(i: usize) -> U {
-//         U(i);
+create_trait!(ListenerToken);
+create_trait!(IncomingToken);
+create_trait!(OutgoingToken);
+
+// impl From<usize> for ListenerToken {
+//     fn from(i: usize) -> ListenerToken {
+//         ListenerToken(i)
 //     }
 // }
-//
-// impl<U> From<U> for usize {
-//     fn from(val: U) -> usize {
+
+// impl From<ListenerToken> for usize {
+//     fn from(val: ListenerToken) -> usize {
 //         val.0
 //     }
 // }
-impl From<usize> for ListenerToken {
-    fn from(i: usize) -> ListenerToken {
-        ListenerToken(i)
-    }
-}
-
-impl From<ListenerToken> for usize {
-    fn from(val: ListenerToken) -> usize {
-        val.0
-    }
-}
-
-impl From<usize> for IncomingToken {
-    fn from(i: usize) -> IncomingToken {
-        IncomingToken(i)
-    }
-}
-
-impl From<IncomingToken> for usize {
-    fn from(val: IncomingToken) -> usize {
-        val.0
-    }
-}
-
-impl From<usize> for OutgoingToken {
-    fn from(i: usize) -> OutgoingToken {
-        OutgoingToken(i)
-    }
-}
-
-impl From<OutgoingToken> for usize {
-    fn from(val: OutgoingToken) -> usize {
-        val.0
-    }
-}
+//
+// impl From<usize> for IncomingToken {
+//     fn from(i: usize) -> IncomingToken {
+//         IncomingToken(i)
+//     }
+// }
+//
+// impl From<IncomingToken> for usize {
+//     fn from(val: IncomingToken) -> usize {
+//         val.0
+//     }
+// }
+//
+// impl From<usize> for OutgoingToken {
+//     fn from(i: usize) -> OutgoingToken {
+//         OutgoingToken(i)
+//     }
+// }
+//
+// impl From<OutgoingToken> for usize {
+//     fn from(val: OutgoingToken) -> usize {
+//         val.0
+//     }
+// }
