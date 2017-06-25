@@ -31,19 +31,21 @@ pub enum EndPointType {
 }
 
 macro_rules! create_trait {
-	($type_name:ident) => (
-	impl From<usize> for $type_name {
-		fn from(i: usize) -> $type_name {
-			$type_name(i)
-		}
-	}
+	( $($type_name:ident),* ) => {
+        $(
+	        impl From<usize> for $type_name {
+                fn from(i: usize) -> $type_name {
+                    $type_name(i)
+                }
+            }
 
-    impl From<$type_name> for usize {
-        fn from(val: $type_name) -> usize {
-            val.0
-        }
+            impl From<$type_name> for usize {
+                fn from(val: $type_name) -> usize {
+                    val.0
+                }
+            }
+        )*
     }
-	)
 }
 
 pub struct EndPoint {
@@ -246,9 +248,7 @@ impl OutgoingToken {
     }
 }
 
-create_trait!(ListenerToken);
-create_trait!(IncomingToken);
-create_trait!(OutgoingToken);
+create_trait!(ListenerToken, IncomingToken, OutgoingToken);
 
 // impl From<usize> for ListenerToken {
 //     fn from(i: usize) -> ListenerToken {
