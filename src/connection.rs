@@ -5,6 +5,7 @@ use mio::tcp::TcpStream;
 use std::io::prelude::*;
 use std::io::ErrorKind;
 use std::ptr;
+use std::ops::{Index, IndexMut};
 
 #[derive(Debug, Copy, Clone)]
 pub enum TokenType {
@@ -24,16 +25,31 @@ pub struct OutgoingToken(pub usize);
 
 type BufferArray = [u8; 4096];
 
-#[derive(Copy, Clone)]
+#[derive(PartialEq, Eq, Hash, Copy, Clone)]
 pub enum EndPointType {
-    Front = 0,
-    Back = 1,
+    Front,
+    Back,
+}
+
+pub struct EndPointList<T>([T; 2]);
+
+impl<T> Index<EndPointType> for EndPointList<T> {
+    type Output = T;
+    fn index(&self, end_type: EndPointType) -> &T {
+        &self.0[end_type as usize]
+    }
+}
+
+impl<T> IndexMut<EndPointType> for EndPointList<T> {
+    fn index_mut(&mut self, end_type: EndPointType) -> &mut T {
+        &mut self.0[end_type as usize]
+    }
 }
 
 macro_rules! create_trait {
-	( $($type_name:ident),* ) => {
+    ( $($type_name:ident),* ) => {
         $(
-	        impl From<usize> for $type_name {
+            impl From<usize> for $type_name {
                 fn from(i: usize) -> $type_name {
                     $type_name(i)
                 }
@@ -126,7 +142,7 @@ impl EndPoint {
 }
 
 pub struct Connection {
-    points: [EndPoint; 2],
+    points: EndPointList<EndPoint>,
     backend_token: OutgoingToken,
 }
 
@@ -140,41 +156,37 @@ impl Connection {
         front.set_peer_stream(&backend.stream);
         backend.set_peer_stream(&front.stream);
         Connection {
-            points: [front, backend],
+            points: EndPointList([front, backend]),
             backend_token: outgoing_token,
         }
     }
 
     pub fn incoming_ready(&mut self, events: Ready) {
-        self.points[EndPointType::Front as usize]
-            .state
-            .insert(events);
+        self.points[EndPointType::Front].state.insert(events);
     }
 
     pub fn outgoing_ready(&mut self, events: Ready) {
-        self.points[EndPointType::Back as usize]
-            .state
-            .insert(events);
+        self.points[EndPointType::Back].state.insert(events);
     }
 
     pub fn is_outgoing_closed(&self) -> bool {
-        let unix_ready = UnixReady::from(self.points[EndPointType::Back as usize].state);
+        let unix_ready = UnixReady::from(self.points[EndPointType::Back].state);
 
         unix_ready.is_error() || unix_ready.is_hup()
     }
 
     pub fn is_incoming_closed(&self) -> bool {
-        let unix_ready = UnixReady::from(self.points[EndPointType::Front as usize].state);
+        let unix_ready = UnixReady::from(self.points[EndPointType::Front].state);
 
         unix_ready.is_error() || unix_ready.is_hup()
     }
 
     pub fn incoming_stream<'a>(&'a self) -> &'a TcpStream {
-        &self.points[EndPointType::Front as usize].stream
+        &self.points[EndPointType::Front].stream
     }
 
     pub fn outgoing_stream<'a>(&'a self) -> &'a TcpStream {
-        &self.points[EndPointType::Back as usize].stream
+        &self.points[EndPointType::Back].stream
     }
 
     pub fn outgoing_token(&self) -> OutgoingToken {
@@ -192,6 +204,7 @@ impl Connection {
     pub fn tick(&mut self) -> bool {
         let mut sended = false;
         let need_pipe: Vec<bool> = self.points
+            .0
             .iter_mut()
             .map(|point| {
                 if point.state.is_readable() {
@@ -208,7 +221,7 @@ impl Connection {
             .rev()
             .collect();
 
-        for (index, point) in self.points.iter_mut().enumerate() {
+        for (index, point) in self.points.0.iter_mut().enumerate() {
             if need_pipe[index] {
                 sended |= (*point).pipe_to_peer() > 0;
             }
