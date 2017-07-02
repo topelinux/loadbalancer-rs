@@ -193,14 +193,6 @@ impl Connection {
         self.backend_token
     }
 
-    // pub fn transfer(&mut self, src_index: usize, dest_index: usize) -> usize {
-    //     if self.points[dest_index].state.is_writable() {
-    //         self.points[dest_index].state.remove(Ready::writable());
-    //         return self.points[src_index].pipe_to_peer();
-    //     }
-    //     0
-    // }
-
     pub fn tick(&mut self) -> bool {
         let mut sended = false;
         let need_pipe: Vec<bool> = self.points
@@ -262,39 +254,3 @@ impl OutgoingToken {
 }
 
 create_trait!(ListenerToken, IncomingToken, OutgoingToken);
-
-// impl From<usize> for ListenerToken {
-//     fn from(i: usize) -> ListenerToken {
-//         ListenerToken(i)
-//     }
-// }
-
-// impl From<ListenerToken> for usize {
-//     fn from(val: ListenerToken) -> usize {
-//         val.0
-//     }
-// }
-//
-// impl From<usize> for IncomingToken {
-//     fn from(i: usize) -> IncomingToken {
-//         IncomingToken(i)
-//     }
-// }
-//
-// impl From<IncomingToken> for usize {
-//     fn from(val: IncomingToken) -> usize {
-//         val.0
-//     }
-// }
-//
-// impl From<usize> for OutgoingToken {
-//     fn from(i: usize) -> OutgoingToken {
-//         OutgoingToken(i)
-//     }
-// }
-//
-// impl From<OutgoingToken> for usize {
-//     fn from(val: OutgoingToken) -> usize {
-//         val.0
-//     }
-// }
